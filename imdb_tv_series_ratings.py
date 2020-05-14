@@ -15,7 +15,8 @@ debug = False
 series_list = [
     {'id': '0118401', 'name': 'Midsomer Murders'},
     {'id': '0096697', 'name': 'The Simpsons'},
-    {'id': '1466074', 'name': 'Columbo'}
+    {'id': '1466074', 'name': 'Columbo'},
+    {'id': '0098904', 'name': 'Seinfeld'},
 ]
 
 for series_id in series_list:
