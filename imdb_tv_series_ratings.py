@@ -19,6 +19,7 @@ series_list = [
     {'id': '0098904', 'name': 'Seinfeld'},
     {'id': '0898266', 'name': 'The Big Bang Theory'},
     {'id': '0436992', 'name': 'Doctor Who (2005)'},
+    {'id': '1486217', 'name': 'Archer'},
 ]
 
 for series_id in series_list:
