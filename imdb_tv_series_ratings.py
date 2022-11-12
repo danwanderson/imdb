@@ -4,6 +4,7 @@
 from imdb import Cinemagoer
 from tabulate import tabulate
 from termcolor import colored
+from operator import itemgetter
 
 # create an instance of the IMDb class
 ia = Cinemagoer()
@@ -36,9 +37,13 @@ series_list = [
     {'id': '0773262', 'name': 'Dexter'},
     {'id': '0056751', 'name': 'Doctor Who (1963)'},
     {'id': '0106179', 'name': 'The X-Files'},
+    {'id': '0141842', 'name': 'The Sopranos'},
+    {'id': '0068098', 'name': 'M*A*S*H'},
+
 ]
 
-for series_id in series_list:
+# Sort by series name
+for series_id in sorted(series_list, key=itemgetter('name')):
     series = ia.get_movie(series_id['id'])
 
     ia.update(series, 'episodes')
