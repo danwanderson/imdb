@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-from imdb import IMDb
+from imdb import Cinemagoer
 # from tabulate import tabulate
 from termcolor import colored
 
 # create an instance of the IMDb class
-ia = IMDb()
+ia = Cinemagoer()
 
 # Print debug info?
 debug = False
@@ -34,6 +34,12 @@ mcu_list = [
     {'id': '4154664', 'name': 'Captain Marvel (2019)'},
     {'id': '4154796', 'name': 'Avengers: Endgame (2019)'},
     {'id': '6320628', 'name': 'Spider-Man: Far From Home (2019)'},
+    {'id': '3480822', 'name': 'Black Widow (2021)'},
+    {'id': '9376612', 'name': 'Shang-Chi and the Legend Of The Ten Rings (2021)'},
+    {'id': '9032400', 'name': 'Eternals (2021)'},
+    {'id': '10872600', 'name': 'Spider-Man: No Way Home (2021)'},
+    {'id': '9419884', 'name': 'Doctor Strange in the Multiverse Of Madness (2022)'},
+    {'id': '10648342', 'name': 'Thor: Love and Thunder (2022)'},
 ]
 
 data = {}
