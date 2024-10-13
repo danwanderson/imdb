@@ -2,4 +2,5 @@
 
 set -euo pipefail
 # set -x
-pip3 install Cinemagoer tabulate termcolor
+#
+pipx install Cinemagoer tabulate termcolor
