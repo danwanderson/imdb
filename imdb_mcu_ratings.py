@@ -317,7 +317,7 @@ def main() -> None:
                 f"Title comparison - IMDb: '{imdb_title_with_year}' | "
                 f"Expected: '{expected_title}'"
             )
-            if imdb_title_with_year != expected_title:
+            if imdb_title_with_year.lower() != expected_title.lower():
                 logging.warning(
                     f"Title mismatch for ID {movie_id['id']}: "
                     f"'{imdb_title_with_year}' != '{expected_title}'"
