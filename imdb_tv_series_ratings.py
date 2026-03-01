@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# pylint: disable=import-error,too-many-locals,too-many-branches
-# pylint: disable=too-many-statements,logging-fstring-interpolation
-# pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
-# pyright: ignore[reportUnknownVariableType,reportUnknownParameterType]
 
 """Fetch and display IMDb ratings for TV series episodes organized by season.
 
@@ -42,12 +38,11 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from operator import itemgetter
-from typing import Callable, Any
+from typing import Any, Callable, cast
 
 from tabulate import tabulate
 from termcolor import colored
 from imdb import Cinemagoer  # type: ignore
-from imdb.Movie import Movie  # type: ignore
 from imdb._exceptions import IMDbDataAccessError  # type: ignore
 
 
@@ -65,12 +60,12 @@ def is_503_error(error: Exception) -> bool:
         True if it's a 503 error, False otherwise
     """
     if isinstance(error, IMDbDataAccessError):
-        # type: ignore[assignment, call-overload, arg-type, no-any-return]
-        error_dict = error.args[0] if error.args else {}
-        if isinstance(error_dict, dict):
-            original_exc = error_dict.get('original exception')
-            if original_exc and hasattr(original_exc, 'code'):
-                return original_exc.code == 503
+        error_dict: dict[str, Any] = cast(
+            dict[str, Any], error.args[0] if error.args else {}
+        )
+        original_exc = error_dict.get('original exception')
+        if original_exc and hasattr(original_exc, 'code'):
+            return getattr(original_exc, 'code', None) == 503
     return False
 
 
@@ -177,8 +172,7 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def process_series(
-    ia: Cinemagoer,  # type: ignore[valid-type]
-    series_id: dict[str, str]
+    ia: Any, series_id: dict[str, str]
 ) -> tuple[str, dict[str, list[str]]]:
     """Process a single TV series and return episode ratings by season.
 
@@ -207,49 +201,51 @@ def process_series(
     """
     logging.debug(f"Fetching series: {series_id['name']}")
     # Fetch series data with automatic retry on 503 errors
-    # type: ignore[arg-type]
-    series: Movie = retry_with_backoff(ia.get_movie, series_id['id'])
+    series: dict[str, Any] = cast(
+        dict[str, Any],
+        retry_with_backoff(ia.get_movie, series_id['id'])
+    )
 
     # Update with episodes data (also with retry protection)
-    retry_with_backoff(ia.update, series, 'episodes')  # type: ignore[arg-type]
+    retry_with_backoff(ia.update, series, 'episodes')
     # Note: 'episodes rating' infoset not needed for individual episode ratings
 
     # First pass: collect all ratings to find global and season-level extremes
     season_ratings: dict[int, list[tuple[int, float | None]]] = {}
     all_ratings: list[float] = []
 
-    # type: ignore[attr-defined]
     for season in sorted(series['episodes'].keys()):
         logging.debug(
             f"Processing season {season} of {series['title']}"
         )
         logging.debug(
             f"Episodes in season {season}: "
-            # type: ignore[attr-defined]
             f"{list(series['episodes'][season].keys())}"
         )
         season_ratings[season] = []
 
-        # type: ignore[attr-defined]
         for episode in series['episodes'][season].keys():
             logging.debug(f"Processing S{season:02}E{episode:02}")
+            episode_data: dict[str, Any] | None = None
             try:
-                # type: ignore[assignment, index, arg-type]
-                episode_data = series['episodes'][season][episode]
+                episode_data = cast(
+                    dict[str, Any],
+                    series['episodes'][season][episode]
+                )
                 # Fetch episode details with retry protection
-                # type: ignore[arg-type]
                 retry_with_backoff(ia.update, episode_data, 'main')
-                # type: ignore[attr-defined]
                 logging.debug(f"Episode data keys: {episode_data.keys()}")
-                # type: ignore[assignment, index]
-                rating_value: float = episode_data['rating']
-                # type: ignore[assignment, index]
-                title: str = episode_data['title']
+                rating_value: float = cast(
+                    float, episode_data['rating']
+                )
+                title: str = cast(
+                    str, episode_data['title']
+                )
                 logging.debug(
                     f"S{season:02}E{episode:02} - {title}: {rating_value:.2f}"
                 )
                 season_ratings[season].append(
-                    (episode, rating_value)  # type: ignore[arg-type]
+                    (episode, rating_value)
                 )
                 all_ratings.append(rating_value)
             except KeyError as e:
@@ -257,14 +253,12 @@ def process_series(
                     f"KeyError for S{season:02}E{episode:02}: {e}"
                 )
                 episode_data_str = (
-                    str(episode_data)  # type: ignore[arg-type]
-                    if 'episode_data' in locals()
-                    else 'not found'
+                    str(episode_data) if episode_data else 'not found'
                 )
                 logging.debug(f"Episode data: {episode_data_str}")
                 # Store None for missing ratings
                 season_ratings[season].append(
-                    (episode, None)  # type: ignore[arg-type]
+                    (episode, None)
                 )
 
     # Calculate global max/min across entire show
@@ -283,17 +277,19 @@ def process_series(
     # Second pass: format ratings with color coding and markers
     data: dict[str, list[str]] = {}
 
-    # type: ignore[attr-defined]
     for season in sorted(series['episodes'].keys()):
         ratings_strs: list[str] = []
 
-        # type: ignore[assignment]
-        for episode, rating_value in season_ratings[season]:
-            if rating_value is None:  # type: ignore[comparison-overlap]
+        for episode, rating_value_opt in season_ratings[season]:
+            if rating_value_opt is None:
                 # Missing rating - pad to match width of ratings with markers
                 # and apply red color (0.00 < 5.0)
                 ratings_strs.append(colored("0.00  ", 'red'))
                 continue
+
+            # At this point, rating_value_opt is guaranteed to be float
+            # (not None after the continue above)
+            rating_value: float = rating_value_opt
 
             # Format rating to 2 decimal places
             rating: str = f"{rating_value:.2f}"
@@ -337,7 +333,7 @@ def process_series(
         data.update({season_str: ratings_strs})
 
     logging.debug(f"Season data: {data}")
-    return (series['title'], data)  # type: ignore[return-value]
+    return (series['title'], data)
 
 
 def main() -> None:
@@ -367,7 +363,7 @@ def main() -> None:
     logging.info("Starting TV series ratings fetcher")
 
     # Create Cinemagoer instance for IMDb API access
-    ia: Cinemagoer = Cinemagoer()  # type: ignore[valid-type]
+    ia: Any = Cinemagoer()
 
     series_list: list[dict[str, str]] = [
         {'id': '0118401', 'name': 'Midsomer Murders'},
@@ -455,7 +451,7 @@ def main() -> None:
             series_title: str
             season_data: dict[str, list[str]]
             series_title, season_data = process_series(
-                ia, series_id  # type: ignore[arg-type]
+                ia, series_id
             )
 
             print("------\n")
@@ -480,7 +476,7 @@ def main() -> None:
         with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
             futures = {
                 executor.submit(
-                    process_series, ia, series_id  # type: ignore[arg-type]
+                    process_series, ia, series_id
                 ): series_id for series_id in sorted(
                     series_list, key=itemgetter('name')
                 )

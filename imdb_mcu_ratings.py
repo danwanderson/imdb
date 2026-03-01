@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# pylint: disable=import-error,too-many-locals,too-many-statements
-# pylint: disable=logging-fstring-interpolation
+
 """Fetch and display IMDb ratings for Marvel Cinematic Universe films.
 
 This script retrieves IMDb ratings for all MCU films and displays them
@@ -28,11 +27,10 @@ import logging
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, Any
+from typing import Any, Callable, cast
 
 from termcolor import colored
 from imdb import Cinemagoer  # type: ignore
-from imdb.Movie import Movie  # type: ignore
 from imdb._exceptions import IMDbDataAccessError  # type: ignore
 
 
@@ -152,7 +150,7 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def fetch_movie_rating(
-    ia: "Cinemagoer", movie_id: dict[str, str]  # type: ignore
+    ia: Any, movie_id: dict[str, str]
 ) -> tuple[str, float]:
     """Fetch rating for a single movie with retry logic.
 
@@ -171,15 +169,20 @@ def fetch_movie_rating(
         Logs warnings if title mismatch or missing rating detected
     """
     logging.debug(f"Fetching movie ID: {movie_id['id']}")
-    movie: Movie = retry_with_backoff(
-        ia.get_movie, movie_id['id']  # type: ignore
+    movie: dict[str, Any] = cast(
+        dict[str, Any],
+        retry_with_backoff(ia.get_movie, movie_id['id'])
     )
-    _ = movie.infoset2keys  # type: ignore
+    _ = movie.get('infoset2keys')
 
-    imdb_title: str = movie.get('title', 'Unknown')  # type: ignore[assignment]
-    year_value: int | None = movie.get('year', 0)  # type: ignore[assignment]
+    imdb_title: str = cast(
+        str, movie.get('title', 'Unknown')
+    )
+    year_value: int | None = cast(
+        int | None, movie.get('year', 0)
+    )
     imdb_year: int = (
-        int(year_value) if year_value else 0  # type: ignore[arg-type]
+        int(year_value) if year_value else 0
     )
     imdb_title_with_year: str = f"{imdb_title} ({imdb_year})"
     expected_title: str = movie_id['name']
@@ -194,12 +197,12 @@ def fetch_movie_rating(
         )
 
     try:
-        rating: float = movie.get('rating')
-    except KeyError:
+        rating: float = cast(float, movie.get('rating', 0.0))
+    except (KeyError, TypeError):
         rating = 0.0
         logging.warning(f"No rating found for {movie_id['name']}")
 
-    title: str = movie['title']
+    title: str = cast(str, movie.get('title', 'Unknown'))
     logging.debug(f"Rating for {title}: {rating}")
     return (title, rating)
 
@@ -230,7 +233,7 @@ def main() -> None:
     logging.info("Starting MCU ratings fetcher")
 
     # Create Cinemagoer instance for IMDb API access
-    ia: Cinemagoer = Cinemagoer()  # type: ignore[valid-type]
+    ia: Any = Cinemagoer()
 
     mcu_list: list[dict[str, str]] = [
         {'id': '0371746', 'name': 'Iron Man (2008)'},
@@ -293,19 +296,20 @@ def main() -> None:
         for movie_id in mcu_list:
             logging.debug(f"Fetching movie ID: {movie_id['id']}")
             # Fetch movie data with automatic retry on 503 errors
-            # type: ignore[arg-type]
-            movie: Movie = retry_with_backoff(
-                ia.get_movie, movie_id['id']
+            movie: dict[str, Any] = cast(
+                dict[str, Any],
+                retry_with_backoff(ia.get_movie, movie_id['id'])
             )
             # Ensure all data sets are loaded
-            # type: ignore[attr-defined]
-            _ = movie.infoset2keys
+            _ = movie.get('infoset2keys')
 
             # Validate title matches expected value
-            imdb_title: str = movie.get('title', 'Unknown')
-            # type: ignore[assignment, arg-type]
-            year_value: int | None = movie.get('year', 0)
-            # type: ignore[arg-type]
+            imdb_title: str = cast(
+                str, movie.get('title', 'Unknown')
+            )
+            year_value: int | None = cast(
+                int | None, movie.get('year', 0)
+            )
             imdb_year: int = int(year_value) if year_value else 0
             imdb_title_with_year: str = f"{imdb_title} ({imdb_year})"
             expected_title: str = movie_id['name']
@@ -321,11 +325,13 @@ def main() -> None:
 
             # Extract rating, default to 0.0 if not available
             try:
-                rating: float = movie.get('rating')
-            except KeyError:
+                rating: float = cast(
+                    float, movie.get('rating', 0.0)
+                )
+            except (KeyError, TypeError):
                 rating = 0.0
                 logging.warning(f"No rating found for {movie_id['name']}")
-            title: str = movie['title']
+            title: str = cast(str, movie.get('title', 'Unknown'))
             logging.debug(f"Rating for {title}: {rating}")
             data.update({title: rating})
     else:
@@ -356,7 +362,6 @@ def main() -> None:
 
     logging.debug(f"All ratings data: {data}")
 
-    # type: ignore[arg-type]
     sorted_by_rating: list[str] = sorted(
         data, key=lambda x: data[x], reverse=True
     )
