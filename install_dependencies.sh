@@ -3,8 +3,7 @@
 set -euo pipefail
 # set -x
 
-python3 -m venv imdb
-source imdb/bin/activate
-pip3 install Cinemagoer tabulate termcolor
-
-echo "Please run: 'source imdb/bin/activate'"
+python3 -m venv .venv
+source .venv/bin/activate
+pip3 install tabulate termcolor # Cinemagoer 
+pip3 install git+https://github.com/cinemagoer/cinemagoer
