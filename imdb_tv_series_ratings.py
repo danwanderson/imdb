@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# pylint: disable=import-error,too-many-locals,too-many-branches
+# pylint: disable=too-many-statements,logging-fstring-interpolation
+# pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
+# pyright: ignore[reportUnknownVariableType,reportUnknownParameterType]
 
 """Fetch and display IMDb ratings for TV series episodes organized by season.
 
@@ -19,31 +23,32 @@ Usage:
     python imdb_tv_series_ratings.py [--debug] [--max-workers N]
 
 Examples:
-    python imdb_tv_series_ratings.py                         # All shows, sequential
-    python imdb_tv_series_ratings.py --show Dexter           # Only Dexter
-    python imdb_tv_series_ratings.py --show "Doctor Who"     # Both Doctor Who series
-    python imdb_tv_series_ratings.py --show Archer Daria     # Multiple shows
-    python imdb_tv_series_ratings.py --list-shows            # List available shows
-    python imdb_tv_series_ratings.py --max-workers 5         # Parallel mode
-    python imdb_tv_series_ratings.py --debug                 # With debug logging
+    python imdb_tv_series_ratings.py              # All shows, sequential
+    python imdb_tv_series_ratings.py --show Dexter  # Only Dexter
+    python imdb_tv_series_ratings.py --show "Doctor Who"  # Both
+    python imdb_tv_series_ratings.py --show Archer Daria  # Multiple
+    python imdb_tv_series_ratings.py --list-shows  # List available shows
+    python imdb_tv_series_ratings.py --max-workers 5  # Parallel mode
+    python imdb_tv_series_ratings.py --debug  # With debug logging
 
 Dependencies:
     pip3 install Cinemagoer termcolor tabulate
 """
 
 # pip3 install Cinemagoer termcolor tabulate
-import sys
 import argparse
 import logging
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from operator import itemgetter
+from typing import Callable, Any
+
+from tabulate import tabulate
+from termcolor import colored
 from imdb import Cinemagoer  # type: ignore
 from imdb.Movie import Movie  # type: ignore
 from imdb._exceptions import IMDbDataAccessError  # type: ignore
-from tabulate import tabulate
-from termcolor import colored
-from operator import itemgetter
-from typing import Callable, Any
 
 
 def is_503_error(error: Exception) -> bool:
@@ -60,6 +65,7 @@ def is_503_error(error: Exception) -> bool:
         True if it's a 503 error, False otherwise
     """
     if isinstance(error, IMDbDataAccessError):
+        # type: ignore[assignment, call-overload, arg-type, no-any-return]
         error_dict = error.args[0] if error.args else {}
         if isinstance(error_dict, dict):
             original_exc = error_dict.get('original exception')
@@ -102,10 +108,13 @@ def retry_with_backoff(
     for attempt in range(max_retries):
         try:
             return func(*args, **kwargs)
+        # pylint: disable=broad-exception-caught
         except Exception as e:
             if is_503_error(e):
                 if attempt < max_retries - 1:
-                    wait_time = min(backoff_seconds * (2 ** attempt), max_backoff)
+                    wait_time = min(
+                        backoff_seconds * (2 ** attempt), max_backoff
+                    )
                     logging.warning(
                         f"503 error encountered "
                         f"(attempt {attempt + 1}/{max_retries}). "
@@ -124,6 +133,7 @@ def retry_with_backoff(
                 raise
 
     # Should not reach here, but just in case
+    # pylint: disable=broad-exception-raised
     raise Exception("Unexpected retry loop exit")
 
 
@@ -167,7 +177,8 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def process_series(
-    ia: Cinemagoer, series_id: dict[str, str]
+    ia: Cinemagoer,  # type: ignore[valid-type]
+    series_id: dict[str, str]
 ) -> tuple[str, dict[str, list[str]]]:
     """Process a single TV series and return episode ratings by season.
 
@@ -196,51 +207,65 @@ def process_series(
     """
     logging.debug(f"Fetching series: {series_id['name']}")
     # Fetch series data with automatic retry on 503 errors
+    # type: ignore[arg-type]
     series: Movie = retry_with_backoff(ia.get_movie, series_id['id'])
 
     # Update with episodes data (also with retry protection)
-    retry_with_backoff(ia.update, series, 'episodes')
+    retry_with_backoff(ia.update, series, 'episodes')  # type: ignore[arg-type]
     # Note: 'episodes rating' infoset not needed for individual episode ratings
 
     # First pass: collect all ratings to find global and season-level extremes
     season_ratings: dict[int, list[tuple[int, float | None]]] = {}
     all_ratings: list[float] = []
 
+    # type: ignore[attr-defined]
     for season in sorted(series['episodes'].keys()):
         logging.debug(
             f"Processing season {season} of {series['title']}"
         )
         logging.debug(
             f"Episodes in season {season}: "
+            # type: ignore[attr-defined]
             f"{list(series['episodes'][season].keys())}"
         )
         season_ratings[season] = []
 
+        # type: ignore[attr-defined]
         for episode in series['episodes'][season].keys():
             logging.debug(f"Processing S{season:02}E{episode:02}")
             try:
+                # type: ignore[assignment, index, arg-type]
                 episode_data = series['episodes'][season][episode]
                 # Fetch episode details with retry protection
+                # type: ignore[arg-type]
                 retry_with_backoff(ia.update, episode_data, 'main')
+                # type: ignore[attr-defined]
                 logging.debug(f"Episode data keys: {episode_data.keys()}")
+                # type: ignore[assignment, index]
                 rating_value: float = episode_data['rating']
+                # type: ignore[assignment, index]
                 title: str = episode_data['title']
                 logging.debug(
                     f"S{season:02}E{episode:02} - {title}: {rating_value:.2f}"
                 )
-                season_ratings[season].append((episode, rating_value))
+                season_ratings[season].append(
+                    (episode, rating_value)  # type: ignore[arg-type]
+                )
                 all_ratings.append(rating_value)
             except KeyError as e:
                 logging.warning(
                     f"KeyError for S{season:02}E{episode:02}: {e}"
                 )
                 episode_data_str = (
-                    str(episode_data) if 'episode_data' in locals()
+                    str(episode_data)  # type: ignore[arg-type]
+                    if 'episode_data' in locals()
                     else 'not found'
                 )
                 logging.debug(f"Episode data: {episode_data_str}")
                 # Store None for missing ratings
-                season_ratings[season].append((episode, None))
+                season_ratings[season].append(
+                    (episode, None)  # type: ignore[arg-type]
+                )
 
     # Calculate global max/min across entire show
     global_max: float | None = max(all_ratings) if all_ratings else None
@@ -258,28 +283,20 @@ def process_series(
     # Second pass: format ratings with color coding and markers
     data: dict[str, list[str]] = {}
 
+    # type: ignore[attr-defined]
     for season in sorted(series['episodes'].keys()):
         ratings_strs: list[str] = []
 
+        # type: ignore[assignment]
         for episode, rating_value in season_ratings[season]:
-            if rating_value is None:
+            if rating_value is None:  # type: ignore[comparison-overlap]
                 # Missing rating - pad to match width of ratings with markers
-                ratings_strs.append("0.00  ")
+                # and apply red color (0.00 < 5.0)
+                ratings_strs.append(colored("0.00  ", 'red'))
                 continue
 
             # Format rating to 2 decimal places
             rating: str = f"{rating_value:.2f}"
-
-            # Apply color coding based on rating thresholds
-            rating_str: str
-            if rating_value >= 8.0:
-                rating_str = colored(rating, 'green')
-            elif rating_value >= 6.5:
-                rating_str = colored(rating, 'yellow')
-            elif rating_value >= 5.0:
-                rating_str = colored(rating, 'blue')
-            else:
-                rating_str = colored(rating, 'red')
 
             # Add markers: show-level markers take precedence over season-level
             marker: str = ""
@@ -292,9 +309,21 @@ def process_series(
             elif season in season_min and rating_value == season_min[season]:
                 marker = "-"
 
-            # Pad marker to 2 characters for consistent column alignment
+            # Pad marker to 2 characters and add to rating BEFORE coloring
             marker_padded: str = f"{marker:<2}"
-            rating_str += marker_padded
+            rating_with_marker: str = rating + marker_padded
+
+            # Apply color coding based on rating thresholds
+            rating_str: str
+            if rating_value >= 8.0:
+                rating_str = colored(rating_with_marker, 'green')
+            elif rating_value >= 6.5:
+                rating_str = colored(rating_with_marker, 'yellow')
+            elif rating_value >= 5.0:
+                rating_str = colored(rating_with_marker, 'blue')
+            else:
+                rating_str = colored(rating_with_marker, 'red')
+
             ratings_strs.append(rating_str)
             logging.debug(
                 f"Added rating for S{season:02}E{episode:02}: "
@@ -308,7 +337,7 @@ def process_series(
         data.update({season_str: ratings_strs})
 
     logging.debug(f"Season data: {data}")
-    return (series['title'], data)
+    return (series['title'], data)  # type: ignore[return-value]
 
 
 def main() -> None:
@@ -338,7 +367,7 @@ def main() -> None:
     logging.info("Starting TV series ratings fetcher")
 
     # Create Cinemagoer instance for IMDb API access
-    ia: Cinemagoer = Cinemagoer()
+    ia: Cinemagoer = Cinemagoer()  # type: ignore[valid-type]
 
     series_list: list[dict[str, str]] = [
         {'id': '0118401', 'name': 'Midsomer Murders'},
@@ -407,9 +436,11 @@ def main() -> None:
             )
             sys.exit(1)
 
+        show_names = ', '.join(
+            s['name'] for s in sorted(series_list, key=itemgetter('name'))
+        )
         logging.info(
-            f"Processing {len(series_list)} selected show(s): "
-            f"{', '.join(s['name'] for s in sorted(series_list, key=itemgetter('name')))}"
+            f"Processing {len(series_list)} selected show(s): {show_names}"
         )
 
     # Fetch ratings: sequential by default, parallel if --max-workers specified
@@ -423,7 +454,9 @@ def main() -> None:
         for series_id in sorted(series_list, key=itemgetter('name')):
             series_title: str
             season_data: dict[str, list[str]]
-            series_title, season_data = process_series(ia, series_id)
+            series_title, season_data = process_series(
+                ia, series_id  # type: ignore[arg-type]
+            )
 
             print("------\n")
             print(f"Ratings information for {series_title}\n")
@@ -447,7 +480,7 @@ def main() -> None:
         with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
             futures = {
                 executor.submit(
-                    process_series, ia, series_id
+                    process_series, ia, series_id  # type: ignore[arg-type]
                 ): series_id for series_id in sorted(
                     series_list, key=itemgetter('name')
                 )
@@ -471,6 +504,7 @@ def main() -> None:
                         season_data, headers="keys", tablefmt="pretty"
                     ))
                     logging.debug(f"Successfully processed: {series_title}")
+                # pylint: disable=broad-exception-caught
                 except Exception as e:
                     series_id = futures[future]
                     logging.error(

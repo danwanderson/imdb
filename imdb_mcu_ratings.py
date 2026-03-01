@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# pylint: disable=import-error,too-many-locals,too-many-statements
+# pylint: disable=logging-fstring-interpolation
 """Fetch and display IMDb ratings for Marvel Cinematic Universe films.
 
 This script retrieves IMDb ratings for all MCU films and displays them
@@ -21,24 +23,24 @@ Examples:
     python imdb_mcu_ratings.py --debug            # With debug logging
 """
 
-import sys
 import argparse
 import logging
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable, Any
 
-# Check if running in a virtual environment
-if not (sys.prefix != sys.base_prefix):
-    print("Warning: Not running in a virtual environment!")
-    print("Please activate the venv first: source .venv/bin/activate")
-    sys.exit(1)
-
+from termcolor import colored
 from imdb import Cinemagoer  # type: ignore
 from imdb.Movie import Movie  # type: ignore
 from imdb._exceptions import IMDbDataAccessError  # type: ignore
-# from tabulate import tabulate
-from termcolor import colored
-from typing import Callable, Any
+
+
+# Check if running in a virtual environment
+if sys.prefix == sys.base_prefix:
+    print("Warning: Not running in a virtual environment!")
+    print("Please activate the venv first: source .venv/bin/activate")
+    sys.exit(1)
 
 
 def is_503_error(error: Exception) -> bool:
@@ -96,6 +98,7 @@ def retry_with_backoff(
     for attempt in range(max_retries):
         try:
             return func(*args, **kwargs)
+        # pylint: disable=broad-exception-caught
         except Exception as e:
             if is_503_error(e):
                 if attempt < max_retries - 1:
@@ -119,6 +122,7 @@ def retry_with_backoff(
                 raise
 
     # Should not reach here, but just in case
+    # pylint: disable=broad-exception-raised
     raise Exception("Unexpected retry loop exit")
 
 
@@ -226,18 +230,24 @@ def main() -> None:
     logging.info("Starting MCU ratings fetcher")
 
     # Create Cinemagoer instance for IMDb API access
-    ia: Cinemagoer = Cinemagoer()
+    ia: Cinemagoer = Cinemagoer()  # type: ignore[valid-type]
 
     mcu_list: list[dict[str, str]] = [
         {'id': '0371746', 'name': 'Iron Man (2008)'},
         {'id': '0800080', 'name': 'The Incredible Hulk (2008)'},
         {'id': '1228705', 'name': 'Iron Man 2 (2010)'},
         {'id': '0800369', 'name': 'Thor (2011)'},
-        {'id': '0458339', 'name': 'Captain America: The First Avenger (2011)'},
+        {
+            'id': '0458339',
+            'name': 'Captain America: The First Avenger (2011)'
+        },
         {'id': '0848228', 'name': 'The Avengers (2012)'},
         {'id': '1300854', 'name': 'Iron Man 3 (2013)'},
         {'id': '1981115', 'name': 'Thor: The Dark World (2013)'},
-        {'id': '1843866', 'name': 'Captain America: The Winter Soldier (2014)'},
+        {
+            'id': '1843866',
+            'name': 'Captain America: The Winter Soldier (2014)'
+        },
         {'id': '2015381', 'name': 'Guardians of the Galaxy (2014)'},
         {'id': '2395427', 'name': 'Avengers: Age of Ultron (2015)'},
         {'id': '0478970', 'name': 'Ant-Man (2015)'},
@@ -283,13 +293,20 @@ def main() -> None:
         for movie_id in mcu_list:
             logging.debug(f"Fetching movie ID: {movie_id['id']}")
             # Fetch movie data with automatic retry on 503 errors
-            movie: Movie = retry_with_backoff(ia.get_movie, movie_id['id'])  # type: ignore
-            _ = movie.infoset2keys  # type: ignore  # Ensure all data sets are loaded
+            # type: ignore[arg-type]
+            movie: Movie = retry_with_backoff(
+                ia.get_movie, movie_id['id']
+            )
+            # Ensure all data sets are loaded
+            # type: ignore[attr-defined]
+            _ = movie.infoset2keys
 
             # Validate title matches expected value
             imdb_title: str = movie.get('title', 'Unknown')
-            year_value: int | None = movie.get('year', 0)  # type: ignore[assignment]
-            imdb_year: int = int(year_value) if year_value else 0  # type: ignore[arg-type]
+            # type: ignore[assignment, arg-type]
+            year_value: int | None = movie.get('year', 0)
+            # type: ignore[arg-type]
+            imdb_year: int = int(year_value) if year_value else 0
             imdb_title_with_year: str = f"{imdb_title} ({imdb_year})"
             expected_title: str = movie_id['name']
             logging.debug(
@@ -330,6 +347,7 @@ def main() -> None:
                     title, rating = future.result()
                     data[title] = rating
                     logging.debug(f"Successfully retrieved: {title}")
+                # pylint: disable=broad-exception-caught
                 except Exception as e:
                     movie_id = futures[future]
                     logging.error(
@@ -338,7 +356,10 @@ def main() -> None:
 
     logging.debug(f"All ratings data: {data}")
 
-    sorted_by_rating: list[str] = sorted(data, key=data.get, reverse=True)
+    # type: ignore[arg-type]
+    sorted_by_rating: list[str] = sorted(
+        data, key=lambda x: data[x], reverse=True
+    )
 
     logging.debug(f"Sorted titles: {sorted_by_rating}")
     logging.info(f"Successfully fetched ratings for {len(data)} movies")
